@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <link rel="stylesheet" href="https://ssl.gstatic.com/docs/script/css/add-ons1.css">
+  <!-- The CSS package above applies Google styling to buttons and other elements. -->
+
+  <style>
+    .branding-below {
+      bottom: 56px;
+      top: 0;
+    }
+    .branding-text {
+      left: 7px;
+      position: relative;
+      top: 3px;
+    }
+    .col-contain {
+      overflow: hidden;
+    }
+    .col-one {
+      float: left;
+      width: 50%;
+    }
+    .logo {
+      vertical-align: middle;
+    }
+    .radio-spacer {
+      height: 20px;
+    }
+    .width-100 {
+      width: 100%;
+    }
+  </style>
+  <title></title>
+</head>
+<body>
+
+<div class="sidebar branding-below">
+  <!--form>
+    <div class="block">
+      <label for="daily-goal"><b>Daily Goal</b></label>
+      <input type="text" id="daily-goal" />
+    </div>
+  </form-->
+  <pre id="bwdata"></pre>
+</div>
+
+<div class="sidebar bottom">
+  <span class="gray branding-text">BattleWriter</span>
+</div>
+
+<script>
+  addEventListener('DOMContentLoaded', poll);
+
+  function poll() {
+    google.script.run
+            .withSuccessHandler(
+                    function(state) {
+                      const now = Date.now();
+
+                      let display = 'Word Count: ~' + parseInt(state.lastWordCount) + '.\n';
+
+                      if (state.currentSprint) {
+                        const cur = state.currentSprint;
+                        cur.wpm = 0;
+                        // use now instead of endTime... while the sprint is still current
+                        // endTime is just the last time the wordCount changed.
+                        if (cur.endWordCount > cur.startWordCount && now > cur.startTime) {
+                          const minutes = (now - cur.startTime) / 1000 / 60;
+                          cur.wpm = (cur.endWordCount - cur.startWordCount) / minutes;
+                        }
+
+                        display += 'Writing At: ' + cur.wpm + ' WPM' + '.\n\n';
+                      } else {
+                        display += 'Currently taking a break.\n\n';
+                      }
+
+                      const history = []
+
+                      for (const key in state) {
+                        if (key.startsWith('sprint:')) {
+                          history.push(key);
+                        }
+                      }
+
+                      if (history.length > 0) {
+                        history.sort().reverse();
+
+                        display += '-- Historical Writing Sprints --\n\n';
+
+                        for (const key of history) {
+                          const s = state[key];
+                          const d = new Date(s.endTime);
+                          const m = (s.endTime - s.startTime) / 1000 / 60;
+                          display += d.toLocaleDateString() + ' ' + d.toLocaleTimeString() + '.\n';
+                          display += '  - ' + parseInt(s.endWordCount - s.startWordCount) + ' words.\n';
+                          display += '  - ' + (parseInt(m * 100) / 100) + ' minutes.\n';
+                          display += '  - ' + parseInt((s.endWordCount - s.startWordCount) / m) + ' WPM.\n\n';
+                        }
+                      }
+
+                      display += '-- Raw BattleWriter State Data --\n\n'
+
+                      display += JSON.stringify(state, null, 2);
+
+                      const bwdata = document.getElementById('bwdata');
+                      while (bwdata.childNodes.length) {
+                        bwdata.removeChild(bwdata.childNodes[0]);
+                      }
+                      bwdata.appendChild(document.createTextNode(display));
+                    })
+            .poll();
+    
+    setTimeout(poll, 2000)
+  }
+</script>
+</body>
+</html>

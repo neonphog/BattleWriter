@@ -19,7 +19,7 @@
  */
 function onOpen(e) {
   DocumentApp.getUi().createAddonMenu()
-      .addItem('Start', 'showSidebar')
+      .addItem('Open BattleWriter', 'showSidebar')
       .addToUi();
 }
 
@@ -45,11 +45,19 @@ function onInstall(e) {
  */
 function showSidebar() {
   const ui = HtmlService.createHtmlOutputFromFile('Sidebar')
+      .setFaviconUrl('https://lh3.googleusercontent.com/-DslE-KFwjts/ZSnZSXK2i0I/AAAAAAAAHXY/g03NBDIxyIIxjQrotATyxSFQBFVTYtHJACNcBGAsYHQ/s400/icon128.png')
       .setTitle('BattleWriter');
   DocumentApp.getUi().showSidebar(ui);
 }
 
-function loadState() {
+/**
+ * Load the document state.
+ * 
+ * @param {boolean} clearHistory - If true, will not load historical sprints.
+ * 
+ * @return {Object}
+ */
+function _loadState(clearHistory) {
   const state = {
     lastPoll: Date.now(),
     lastWordCount: 0,
@@ -69,16 +77,27 @@ function loadState() {
     state.currentSprint = JSON.parse(rawState.currentSprint);
   }
 
-  for (const key in rawState) {
-    if (key.startsWith('sprint:')) {
-      state[key] = JSON.parse(rawState[key]);
+  if (!clearHistory) {
+    for (const key in rawState) {
+      if (key.startsWith('sprint:')) {
+        state[key] = JSON.parse(rawState[key]);
+      }
     }
+  } else {
+    _storeState(state);
   }
+
+  state.now = Date.now();
 
   return state;
 }
 
-function storeState(state) {
+/**
+ * Store the document state.
+ * 
+ * @param {Object} state
+ */
+function _storeState(state) {
   const rawState = {};
 
   rawState.lastPoll = '' + state.lastPoll;
@@ -98,20 +117,28 @@ function storeState(state) {
 }
 
 /**
- * Idempotent BattleWriter poll function.
+ * BattleWriter poll function.
+ * 
  * Call this as often as is appropriate for memory usage / rate limiting.
  * Will update and return the current BattleWriter state for the current document.
  * 
+ * @param {Object} cmd
+ * @param {boolean} [cmd.closeSprint] - If there is an open sprint, explicitly close it.
+ * @param {boolean} [cmd.clearHistory] - Delete all past sprint information.
+ * 
  * @return {Object}
  */
-function poll() {
-  const state = loadState();
+function poll(cmd) {
+  if (typeof cmd !== 'object') {
+    cmd = {};
+  }
 
-  const now = Date.now();
+  const state = _loadState(cmd.clearHistory);
 
-  if (state.currentSprint && (now - state.currentSprint.endTime) > 1000 * 60 * 5) {
+  if (state.currentSprint && (cmd.closeSprint || (state.now - state.currentSprint.endTime) > 1000 * 60 * 5)) {
     state['sprint:' + state.currentSprint.endTime] = state.currentSprint;
     delete state.currentSprint;
+    _storeState(state);
   }
 
   // it's too memory intensive to use regex to get a real word count
@@ -119,25 +146,25 @@ function poll() {
   // english average word len is 4.7, other langs are larger, so we just use 5
   const wordCount = DocumentApp.getActiveDocument().getBody().getText().length / 5;
 
-  if ((now - state.lastPoll) >= 1000) {
-    state.lastPoll = now;
+  if ((state.now - state.lastPoll) >= 1000) {
+    state.lastPoll = state.now;
 
     if (wordCount !== state.lastWordCount) {
       if (state.currentSprint) {
-        state.currentSprint.endTime = now;
+        state.currentSprint.endTime = state.now;
         state.currentSprint.endWordCount = wordCount;
       } else {
         state.currentSprint = {
-          startTime: now,
+          startTime: state.now,
           startWordCount: state.lastWordCount,
-          endTime: now,
+          endTime: state.now,
           endWordCount: wordCount,
         };
       }
       state.lastWordCount = wordCount;
     }
 
-    storeState(state);
+    _storeState(state);
   }
 
   return state;
